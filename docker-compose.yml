@@ -1,0 +1,112 @@
+name: data-universe
+
+# 端口：19092 Redpanda(宿主机访问) / 8080 Console / 8081 Flink UI / 8123 ClickHouse HTTP / 9000 ClickHouse Native
+services:
+  redpanda:
+    image: redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda
+      - start
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      - --smp=1
+      - --memory=1G
+      - --mode=dev-container
+      - --default-log-level=warn
+    ports: ["19092:19092"]
+    volumes: [redpanda-data:/var/lib/redpanda/data]
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redpanda-init:
+    image: redpandadata/redpanda:v24.2.7
+    depends_on:
+      redpanda: { condition: service_healthy }
+    entrypoint: ["/bin/bash", "/scripts/create_topics.sh"]
+    volumes: [./infra/redpanda:/scripts:ro]
+    restart: "no"
+
+  console:
+    image: redpandadata/console:v2.7.2
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    ports: ["8080:8080"]
+    depends_on:
+      redpanda: { condition: service_healthy }
+
+  jobmanager:
+    build: ./infra/flink
+    image: data-universe/flink:1.18.1
+    command: jobmanager
+    ports: ["8081:8081"]
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: jobmanager
+        jobmanager.memory.process.size: 1024m
+        parallelism.default: 1
+        state.backend.type: hashmap
+        state.checkpoints.dir: file:///opt/flink/checkpoints
+        state.savepoints.dir: file:///opt/flink/savepoints
+        execution.checkpointing.interval: 30s
+    volumes:
+      - ./streaming/flink-sql:/opt/flink/sql:ro
+      - flink-ckpt:/opt/flink/checkpoints
+      - flink-svp:/opt/flink/savepoints
+    depends_on:
+      redpanda-init: { condition: service_completed_successfully }
+
+  taskmanager:
+    build: ./infra/flink
+    image: data-universe/flink:1.18.1
+    command: taskmanager
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 4
+        taskmanager.memory.process.size: 1728m
+        state.checkpoints.dir: file:///opt/flink/checkpoints
+        state.savepoints.dir: file:///opt/flink/savepoints
+    volumes:
+      - flink-ckpt:/opt/flink/checkpoints
+      - flink-svp:/opt/flink/savepoints
+    depends_on: [jobmanager]
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    environment:
+      CLICKHOUSE_DB: du
+      CLICKHOUSE_USER: du
+      CLICKHOUSE_PASSWORD: du_dev
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports: ["8123:8123", "9000:9000"]
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    volumes:
+      - ./storage/clickhouse/init:/docker-entrypoint-initdb.d:ro
+      - ch-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user du --password du_dev -q 'SELECT 1' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    depends_on:
+      redpanda-init: { condition: service_completed_successfully }
+
+  collectors:
+    build: ./collectors
+    image: data-universe/collectors:0.1.0
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP: redpanda:9092
+    depends_on:
+      redpanda-init: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+volumes:
+  redpanda-data: {}
+  flink-ckpt: {}
+  flink-svp: {}
+  ch-data: {}

@@ -1,0 +1,123 @@
+{
+  "_comment": "语言站点 -> 近似地区质心。维基编辑没有真实坐标，这里是 approx 映射，按该语言最主要使用国家取近似国家中心点。en/es 等跨国语言只能粗略近似，必须在前端与 README 中注明。",
+  "en": {
+    "region": "United States",
+    "lat": 39.8,
+    "lng": -98.6
+  },
+  "simple": {
+    "region": "United States",
+    "lat": 39.8,
+    "lng": -98.6
+  },
+  "de": {
+    "region": "Germany",
+    "lat": 51.2,
+    "lng": 10.4
+  },
+  "fr": {
+    "region": "France",
+    "lat": 46.6,
+    "lng": 2.4
+  },
+  "es": {
+    "region": "Spain",
+    "lat": 40.4,
+    "lng": -3.7
+  },
+  "it": {
+    "region": "Italy",
+    "lat": 42.8,
+    "lng": 12.6
+  },
+  "pt": {
+    "region": "Brazil",
+    "lat": -14.2,
+    "lng": -51.9
+  },
+  "ru": {
+    "region": "Russia",
+    "lat": 61.5,
+    "lng": 105.3
+  },
+  "uk": {
+    "region": "Ukraine",
+    "lat": 48.4,
+    "lng": 31.2
+  },
+  "pl": {
+    "region": "Poland",
+    "lat": 51.9,
+    "lng": 19.1
+  },
+  "nl": {
+    "region": "Netherlands",
+    "lat": 52.1,
+    "lng": 5.3
+  },
+  "sv": {
+    "region": "Sweden",
+    "lat": 60.1,
+    "lng": 18.6
+  },
+  "ja": {
+    "region": "Japan",
+    "lat": 36.2,
+    "lng": 138.3
+  },
+  "zh": {
+    "region": "China",
+    "lat": 35.9,
+    "lng": 104.2
+  },
+  "ko": {
+    "region": "South Korea",
+    "lat": 35.9,
+    "lng": 127.8
+  },
+  "vi": {
+    "region": "Vietnam",
+    "lat": 14.1,
+    "lng": 108.3
+  },
+  "id": {
+    "region": "Indonesia",
+    "lat": -0.8,
+    "lng": 113.9
+  },
+  "tr": {
+    "region": "Turkey",
+    "lat": 39.0,
+    "lng": 35.2
+  },
+  "fa": {
+    "region": "Iran",
+    "lat": 32.4,
+    "lng": 53.7
+  },
+  "he": {
+    "region": "Israel",
+    "lat": 31.0,
+    "lng": 34.9
+  },
+  "cs": {
+    "region": "Czechia",
+    "lat": 49.8,
+    "lng": 15.5
+  },
+  "fi": {
+    "region": "Finland",
+    "lat": 61.9,
+    "lng": 25.7
+  },
+  "hu": {
+    "region": "Hungary",
+    "lat": 47.2,
+    "lng": 19.5
+  },
+  "th": {
+    "region": "Thailand",
+    "lat": 15.9,
+    "lng": 100.9
+  }
+}
