@@ -8,6 +8,8 @@
 
 自转 → 切换航班图层 → 点击地震飞抵现场（21 秒，10 fps，宽 800px）
 
+> 用 `node web/benchmarks/record-demo.mjs` 生成，需要本机安装 ffmpeg。
+
 **当前进度：W2 可视化**
 
 ## 快速开始
