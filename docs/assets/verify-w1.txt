@@ -1,0 +1,28 @@
+== 1. 容器状态
+PASS  redpanda running
+PASS  console running
+PASS  jobmanager running
+PASS  taskmanager running
+PASS  clickhouse running
+PASS  collectors running
+== 2. Topic
+PASS  topic raw.usgs
+PASS  topic raw.wiki
+PASS  topic raw.opensky
+PASS  topic evt.unified
+PASS  topic agg.minute
+PASS  topic alert.anomaly
+== 3. Flink 作业
+PASS  flink job RUNNING (exactly 1)
+== 4. ClickHouse 入库
+PASS  wiki 近 10 分钟入库 3455 行 (>=300)
+PASS  usgs 已入库 121 行
+== 5. 延迟（采集 -> ClickHouse 落表）
+PASS  wiki p95 管道延迟 309ms (<=5000)
+== 6. 去重
+PASS  usgs FINAL 后无重复
+== 7. 聚合
+PASS  wiki 近 10 分钟聚合 119 行
+PASS  聚合/明细一致性 ratio=1 (0.95~1.05)
+
+W1 验收全部通过

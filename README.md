@@ -20,6 +20,25 @@ make verify               # 端到端验收
 | Flink UI | http://localhost:8081 |
 | ClickHouse HTTP | http://localhost:8123（du / du_dev） |
 
+验收结果留档：[docs/assets/verify-w1.txt](docs/assets/verify-w1.txt)（`make verify` 全 16 项 PASS）。
+逐步执行手册见 [docs/tasks/W1-runbook.md](docs/tasks/W1-runbook.md)。
+
+### Windows 环境注意
+`make` 的 recipe 在原生 Windows 下会因路径转换与引号处理出错，建议改用 Git Bash 执行等价命令：
+
+```bash
+export MSYS_NO_PATHCONV=1
+export PATH="/c/Program Files/Docker/Docker/resources/bin:$PATH"
+bash scripts/verify.sh                                   # 代替 make verify
+docker compose exec -T jobmanager ./bin/sql-client.sh \
+  -i /opt/flink/sql/00_ddl.sql -f /opt/flink/sql/10_pipeline.sql   # 代替 make flink-submit
+```
+
+`make check` 需为 venv 补 `bin` → `Scripts` 链接（`.venv` 已在 `.gitignore` 内）：
+```powershell
+New-Item -ItemType Junction -Path collectors\.venv\bin -Target collectors\.venv\Scripts
+```
+
 ## 架构
 ```
 USGS / Wikipedia ─► collectors (Python asyncio)
