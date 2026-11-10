@@ -77,7 +77,11 @@ def check_infra() -> None:
     check(jobs.count(f": {OS_JOB} (RUNNING)") == 1, f"Flink 作业 {OS_JOB} RUNNING（恰好 1 个）")
     check(jobs.count(": data-universe-w1 (RUNNING)") == 1, "W1 作业仍在运行（恰好 1 个）")
     ttl = ch("SELECT engine_full FROM system.tables WHERE database='du' AND name='events'")
-    check("source = 'opensky'" in ttl, "ClickHouse 迁移 002 已生效（opensky TTL 1 天）")
+    ttl = ttl.replace("\\'", "'")  # TSV 输出会把单引号转义成 \'
+    check(
+        "source = 'opensky'" in ttl and "toIntervalDay(1)" in ttl,
+        "ClickHouse 迁移 002 已生效（opensky TTL 1 天）",
+    )
     n = ch("SELECT count() FROM events WHERE source='opensky' AND _inserted_at > now64(3) - INTERVAL 30 MINUTE")
     check(n.isdigit() and int(n) >= THRESHOLDS["flights_min"], f"opensky 近 30 分钟入库 {n} 行 (>= {THRESHOLDS['flights_min']})")
     bad_rows = ch("SELECT count() FROM events WHERE source='opensky' AND (lat IS NULL OR abs(lat) > 90 OR abs(lng) > 180)")
