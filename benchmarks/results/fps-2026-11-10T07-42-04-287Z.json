@@ -1,0 +1,15 @@
+{
+  "fps": 60,
+  "low1": 59.5,
+  "frames": 1800,
+  "durationS": 30.002,
+  "wiki_points": 20000,
+  "flights": 10000,
+  "dpr": 1.0000000298023224,
+  "viewport": "1600x900",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36",
+  "pass": true,
+  "gpu": "ANGLE (Intel, Intel(R) Graphics (0x00007D67) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "base_url": "http://localhost:8090",
+  "measured_at": "2026-11-10T07:42:04.287Z"
+}
