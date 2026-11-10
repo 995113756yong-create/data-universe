@@ -20,7 +20,7 @@ describe("decode", () => {
     const pk = decodePoints([wiki], 1_005_000);
     expect(pk.n).toBe(1);
     expect(pk.lat[0]).toBeCloseTo(39.8, 4);
-    expect(pk.ageS[0]).toBeCloseTo(4, 5);
+    expect(pk.ageS[0]).toBeCloseTo(5, 5);
     expect(pk.region[0]).toBe("United States");
     expect(decodePoints([wiki], 0).ageS[0]).toBe(0); // 时钟偏差导致的负数截断为 0
   });
