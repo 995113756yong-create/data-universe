@@ -7,10 +7,12 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
+from gateway.ai.ratelimit import RateLimiter
 from gateway.clickhouse import ClickHouse
 from gateway.config import GatewaySettings
 from gateway.hub import Hub
@@ -19,10 +21,22 @@ from gateway.session import ClientSession
 log = logging.getLogger("gateway.app")
 
 
+class AskBody(BaseModel):
+    question: str = Field(min_length=2, max_length=300)
+
+
+def _client_key(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 def create_app(
     settings: GatewaySettings | None = None,
     ch: ClickHouse | None = None,
     event_source: Callable[[], AsyncIterator[dict]] | None = None,
+    agent=None,
 ) -> FastAPI:
     settings = settings or GatewaySettings.from_env()
 
@@ -42,6 +56,29 @@ def create_app(
         else:
             hub.kafka_ok = True
             source = event_source
+        app.state.agent = agent
+        closers = []
+        if agent is None and settings.ai_enabled:
+            from gateway.ai.agent import Agent
+            from gateway.ai.llm import LLMClient
+
+            llm = LLMClient(
+                settings.llm_base_url,
+                settings.llm_api_key,
+                settings.llm_model,
+                settings.llm_timeout_s,
+            )
+            ai_ch = ClickHouse(
+                settings.clickhouse_url,
+                settings.ai_ch_user,
+                settings.ai_ch_password,
+                timeout_s=15.0,
+            )
+            app.state.agent = Agent(llm, ai_ch, hub.centroids)
+            closers += [llm.close, ai_ch.close]
+            log.info("AI enabled: provider=%s model=%s", settings.llm_provider, settings.llm_model)
+        app.state.ai_sem = asyncio.Semaphore(settings.ai_concurrency)
+        app.state.limiter = RateLimiter(settings.ai_per_min, settings.ai_per_day)
         tasks = [
             asyncio.create_task(hub.consume(source), name="consume"),
             asyncio.create_task(hub.broadcast_metrics(), name="metrics"),
@@ -54,6 +91,8 @@ def create_app(
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await t
             await ch.close()
+            for close in closers:
+                await close()
 
     app = FastAPI(title="Data Universe Gateway", lifespan=lifespan)
 
@@ -86,6 +125,37 @@ def create_app(
             "gateway": {str(k): v for k, v in hub.minutes.snapshot(source).items()},
             "clickhouse": {str(k): v for k, v in chc.items()},
         }
+
+    @app.get("/api/ask/status")
+    async def ask_status():
+        on = app.state.agent is not None
+        return {
+            "enabled": on,
+            "provider": settings.llm_provider if on else None,
+            "model": app.state.agent.llm.model if on else None,
+        }
+
+    @app.post("/api/ask")
+    async def ask(body: AskBody, request: Request):
+        from gateway.ai.agent import AskError
+
+        agent = app.state.agent
+        if agent is None:
+            return JSONResponse(
+                {"error": "AI 提问未开启：在 .env 设置 LLM_API_KEY"}, status_code=503
+            )
+        reason = app.state.limiter.check(_client_key(request))
+        if reason:
+            return JSONResponse({"error": reason}, status_code=429)
+        sem: asyncio.Semaphore = app.state.ai_sem
+        if sem.locked():
+            return JSONResponse({"error": "当前提问人数较多，请稍后再试"}, status_code=429)
+        async with sem:
+            try:
+                res = await agent.ask(body.question.strip())
+            except AskError as exc:
+                return JSONResponse({"error": str(exc)}, status_code=exc.status)
+        return res.to_dict()
 
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket):

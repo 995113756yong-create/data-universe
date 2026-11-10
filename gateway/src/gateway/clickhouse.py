@@ -69,6 +69,23 @@ GROUP BY m
 ORDER BY m
 """
 
+RECENT_ALERTS = """
+SELECT alert_id, alert_type, source, region, window_start,
+       toUnixTimestamp64Milli(event_time), toUnixTimestamp64Milli(detected_time),
+       value, baseline_mean, baseline_std, zscore, severity, lat, lng, title
+FROM du.alerts FINAL
+WHERE event_time > now64(3) - INTERVAL {hours:UInt32} HOUR
+ORDER BY event_time DESC
+LIMIT 100
+"""
+
+ALERTS_24H = """
+SELECT alert_type, count()
+FROM du.alerts FINAL
+WHERE event_time > now64(3) - INTERVAL 24 HOUR
+GROUP BY alert_type
+"""
+
 POINT_KEYS = (
     "event_id",
     "lat",
@@ -82,11 +99,17 @@ POINT_KEYS = (
 )
 
 
+class ClickHouseError(Exception):
+    """ClickHouse 返回 4xx/5xx，消息为服务端错误文本（截断）。"""
+
+
 class ClickHouse:
-    def __init__(self, url: str, user: str, password: str, transport=None) -> None:
+    def __init__(
+        self, url: str, user: str, password: str, transport=None, timeout_s: float = 8.0
+    ) -> None:
         self._client = httpx.AsyncClient(
             base_url=url,
-            timeout=httpx.Timeout(8.0),
+            timeout=httpx.Timeout(timeout_s),
             transport=transport,
             headers={"X-ClickHouse-User": user, "X-ClickHouse-Key": password},
         )
@@ -106,6 +129,28 @@ class ClickHouse:
         resp = await self._client.post("/", params=query, content=sql.encode())
         resp.raise_for_status()
         return orjson.loads(resp.content)["data"]
+
+    async def query(self, sql: str, settings: dict[str, str] | None = None) -> dict:
+        """执行任意（已校验的）只读 SQL，返回 {columns, rows}。
+
+        供 AI 提问使用，必须用只读账号 du_ai 建的实例调用（账号级 readonly=2，见迁移 004）。
+        """
+        query = {
+            "database": "du",
+            "default_format": "JSONCompact",
+            **(settings or {}),
+        }
+        resp = await self._client.post("/", params=query, content=sql.encode())
+        if resp.status_code >= 400:
+            raise ClickHouseError(resp.text[:800])
+        body = orjson.loads(resp.content)
+        return {"columns": [m["name"] for m in body.get("meta", [])], "rows": body.get("data", [])}
+
+    async def recent_alerts(self, hours: int = 6) -> list[dict]:
+        from gateway.alerts import ALERT_FIELDS
+
+        rows = await self.rows(RECENT_ALERTS, hours=hours)
+        return [dict(zip(ALERT_FIELDS, r, strict=True)) for r in rows]
 
     async def snapshot(self, layer: str, flight_window_s: int) -> list[dict]:
         """返回 evt.unified 形态的 dict，与实时消息统一走 protocol.encode。"""
@@ -134,11 +179,16 @@ class ClickHouse:
         trend = await self.rows(TREND_30M)
         top = await self.rows(TOP_REGIONS_10M)
         quakes = await self.rows(QUAKES_24H)
+        try:
+            alerts = {t: int(c) for t, c in await self.rows(ALERTS_24H)}
+        except httpx.HTTPStatusError:
+            alerts = {}  # 迁移 003 未执行时 du.alerts 不存在，不影响其他面板数据
         q_cnt, q_max = quakes[0] if quakes else (0, 0)
         return {
             "trend": [{"ts": int(t), "source": s, "cnt": int(c)} for t, s, c in trend],
             "top_regions": [{"source": s, "region": r, "cnt": int(c)} for s, r, c in top],
             "quakes_24h": {"count": int(q_cnt), "max_mag": float(q_max or 0)},
+            "alerts_24h": alerts,
         }
 
     async def minute_counts(self, source: str) -> dict[int, int]:

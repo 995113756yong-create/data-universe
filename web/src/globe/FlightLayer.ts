@@ -70,6 +70,15 @@ export class FlightLayer {
     return this.index.size;
   }
 
+  /** 清空所有飞机（回放拖动进度时用） */
+  clear() {
+    this.index.clear();
+    this.free.length = 0;
+    this.used = 0;
+    this.alphas.fill(0);
+    this.object.geometry.attributes.aAlpha.needsUpdate = true;
+  }
+
   setScale(scale: number) {
     this.material.uniforms.uScale.value = scale;
   }

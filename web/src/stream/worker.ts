@@ -70,6 +70,12 @@ function onMessage(ev: MessageEvent<string>) {
     case "metrics":
       post({ k: "metrics", msg: m });
       break;
+    case "alerts":
+      post({ k: "alerts", items: m.rows, live: false });
+      break;
+    case "alert":
+      post({ k: "alerts", items: [m.alert], live: m.new });
+      break;
     case "warn":
       post({ k: "warn", msg: m.msg });
       break;

@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react";
 import { runBench } from "../bench/synthetic";
 import { UniverseEngine, engineRegistry } from "../globe/engine";
+import { IS_REPLAY, REPLAY_ID, REPLAY_ROOT } from "../mode";
 import { LAYERS } from "../protocol";
+import { playerRegistry, ReplayPlayer } from "../replay/player";
 import { store } from "../store";
 import { startStream } from "../stream/client";
 
@@ -14,7 +16,20 @@ export function GlobeView({ bench }: { bench: boolean }) {
     engineRegistry.set(engine);
     if (!engine.coordsOk) store.warn("坐标换算自检失败，点位可能错位（见浏览器控制台）");
 
-    const stop = bench ? () => undefined : startStream(engine);
+    let stop: () => void = () => undefined;
+    if (!bench && IS_REPLAY) {
+      const player = new ReplayPlayer(engine, REPLAY_ROOT);
+      playerRegistry.set(player);
+      player.start(REPLAY_ID).catch((e: Error) => store.warn(`回放加载失败：${e.message}`));
+      stop = () => {
+        player.stop();
+        playerRegistry.set(null);
+      };
+    } else if (!bench) {
+      stop = startStream(engine);
+    }
+    // 告警脉冲只显示最近 1 小时：定期按当前（虚拟）时间刷新
+    const alertTimer = window.setInterval(() => engine.setAlerts(store.get().alerts), 15000);
     if (bench) void runBench(engine);
 
     // 图层开关
@@ -32,6 +47,7 @@ export function GlobeView({ bench }: { bench: boolean }) {
 
     return () => {
       window.clearInterval(hud);
+      window.clearInterval(alertTimer);
       unsub();
       stop();
       engineRegistry.set(null);

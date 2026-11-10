@@ -1,0 +1,48 @@
+# 把 web/public/replay 里的演示回放构建成纯静态站点，部署到 GitHub Pages。
+# 首次使用：仓库 Settings → Pages → Source 选 GitHub Actions；然后在 Actions 页面手动运行本工作流。
+name: pages
+on:
+  workflow_dispatch:
+  push:
+    branches: [master, main]
+    paths: ["web/**"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - name: 必须有演示回放
+        run: test -s public/replay/index.json || (echo "web/public/replay/index.json 不存在：先本地 make replay-export 并提交" && exit 1)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run build:static
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist-static
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,7 +1,7 @@
 {
   "name": "data-universe-web",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -15,7 +15,10 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "bench": "node benchmarks/fps.mjs"
+    "bench": "node benchmarks/fps.mjs",
+    "prebuild:static": "node scripts/fetch-textures.mjs",
+    "build:static": "tsc --noEmit && vite build --mode static --outDir dist-static",
+    "preview:static": "vite preview --mode static --outDir dist-static --port 4173"
   },
   "dependencies": {
     "echarts": "^5.6.0",

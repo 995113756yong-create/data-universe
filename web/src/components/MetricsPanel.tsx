@@ -1,3 +1,4 @@
+import { ago } from "../clock";
 import { engineRegistry } from "../globe/engine";
 import type { Layer } from "../protocol";
 import { useStore } from "../store";
@@ -8,17 +9,12 @@ const fmt = (n: number | undefined, d = 0) =>
 
 const SOURCE_NAME: Record<Layer, string> = { wiki: "维基百科", usgs: "USGS 地震", opensky: "OpenSky 航班" };
 
-function ago(ms: number) {
-  const s = Math.max(0, (Date.now() - ms) / 1000);
-  if (s < 60) return `${Math.round(s)} 秒前`;
-  if (s < 3600) return `${Math.round(s / 60)} 分钟前`;
-  return `${Math.round(s / 3600)} 小时前`;
-}
 
 export function MetricsPanel() {
   const m = useStore((s) => s.metrics);
   const net = useStore((s) => s.net);
   const quakes = useStore((s) => s.quakes);
+  const replay = useStore((s) => s.replay);
 
   return (
     <aside className="panel">
@@ -38,11 +34,19 @@ export function MetricsPanel() {
           <div className="value">{fmt(m?.quakes_24h?.count)}</div>
           <div className="sub">最大 M{fmt(m?.quakes_24h?.max_mag, 1)}</div>
         </div>
-        <div className="card lag">
-          <div className="label">链路延迟 P95</div>
-          <div className="value">{fmt(net.lagP95)}<small> ms</small></div>
-          <div className="sub">采集 → 浏览器（维基）</div>
-        </div>
+        {replay ? (
+          <div className="card lag">
+            <div className="label">回放速度</div>
+            <div className="value">{replay.speed}<small> ×</small></div>
+            <div className="sub">{replay.playing ? "播放中" : "已暂停"}</div>
+          </div>
+        ) : (
+          <div className="card lag">
+            <div className="label">链路延迟 P95</div>
+            <div className="value">{fmt(net.lagP95)}<small> ms</small></div>
+            <div className="sub">采集 → 浏览器（维基）</div>
+          </div>
+        )}
       </div>
 
       <section>
