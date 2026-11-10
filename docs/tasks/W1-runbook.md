@@ -129,10 +129,27 @@ make flink-stop                      # 记下输出里的 savepoint 路径
 make flink-resume SAVEPOINT=<上一步的路径>
 sleep 120 && make verify
 
-# 7.3 全量重启
-make down && make up && sleep 180 && make verify
+# 7.3 全量重启（必须带 savepoint，否则未关闭窗口的聚合会被永久写小）
+docker compose exec -T jobmanager ./bin/flink list -r        # 记下 JobID
+docker compose exec -T jobmanager ./bin/flink stop --savepointPath /opt/flink/savepoints <JobID>   # 记下 Savepoint 路径
+docker compose down                                          # 不要加 -v
+docker compose up -d redpanda redpanda-init console jobmanager taskmanager clickhouse
+docker compose exec -T jobmanager bash -c "{ echo \"SET 'execution.savepoint.path' = '<Savepoint 路径>';\"; cat /opt/flink/sql/10_pipeline.sql; } > /tmp/resume.sql && ./bin/sql-client.sh -i /opt/flink/sql/00_ddl.sql -f /tmp/resume.sql"
+docker compose up -d collectors
+sleep 180 && make verify
 ```
-**验收**：三次 `make verify` 全部通过；usgs 去重检查仍为 0。
+**验收**：三次 `make verify` 全部通过；usgs 去重检查仍为 0；
+7.3 还要确认作业 RUNNING 且 Flink UI → Checkpoints 页 `Restored` 指向该 savepoint。
+
+> 7.3 不允许跳过 savepoint 直接提交，也不允许加 `allowNonRestoredState`。
+> 原因：直接提交会丢失未关闭窗口的状态，重启前后 1~2 个分钟窗口的聚合被永久写小，
+> 一致性 ratio 会掉出 0.95~1.05。等窗口滑走后 verify 变绿也不代表数据正确。
+
+| 现象 | 处理 |
+|---|---|
+| `flink resume` 报找不到 state | 确认 savepoint 路径拼写；确认 `down` 时没加 `-v`（加了会连卷一起删） |
+| 恢复后 Checkpoints 页 `Restored` 为空 | 说明 savepoint 未生效，等同于直接提交：停止作业，回到第 1 步重做 |
+| 恢复后作业 RUNNING 但 ratio 仍 FAIL | 附上按分钟对比数据后报告：`SELECT toStartOfMinute(event_time) m, uniqExact(event_id) FROM events WHERE source='wiki' AND event_time > now() - INTERVAL 10 MINUTE GROUP BY m ORDER BY m` 与 agg_minute 同区间逐分钟 cnt 对比 |
 
 ---
 
