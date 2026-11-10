@@ -51,6 +51,8 @@ export class UniverseEngine {
     const scene = this.globe.scene();
     scene.add(createStars(), this.flights.object, this.wiki.object, this.quakes.object);
 
+    // 调试入口：控制台可查看 __DU_ENGINE__.wiki.object.visible 等
+    (window as unknown as { __DU_ENGINE__: UniverseEngine }).__DU_ENGINE__ = this;
     this.checkCoords();
     void this.loadTexture();
     window.addEventListener("resize", this.onResize);

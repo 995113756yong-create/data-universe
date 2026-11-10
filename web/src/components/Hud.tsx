@@ -11,7 +11,9 @@ export function Hud() {
   const cap = useStore((s) => s.cap);
   const dropped = useStore((s) => s.dropped);
   const warnings = useStore((s) => s.warnings);
-  const total = counts.wiki + counts.usgs + counts.opensky;
+  const layers = useStore((s) => s.layers);
+  // 只统计开着的图层；各图层自己的数量在左上角开关旁显示
+  const total = (layers.wiki ? counts.wiki : 0) + (layers.usgs ? counts.usgs : 0) + (layers.opensky ? counts.opensky : 0);
   return (
     <div className="hud">
       <span className={fps.fps >= 55 ? "good" : fps.fps >= 40 ? "mid" : "bad"}>{fps.fps.toFixed(0)} FPS</span>
