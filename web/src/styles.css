@@ -17,10 +17,10 @@ html, body, #root { margin: 0; height: 100%; overflow: hidden; }
 .globe { position: absolute; inset: 0; }
 .muted { color: var(--muted); margin-left: auto; font-size: 11px; }
 
-.title { position: absolute; top: 20px; left: 24px; pointer-events: none; }
-.title h1 { margin: 0; font-size: 26px; letter-spacing: 2px; font-weight: 600;
+header.title { position: absolute; top: 20px; left: 24px; pointer-events: none; }
+header.title h1 { margin: 0; font-size: 26px; letter-spacing: 2px; font-weight: 600;
   background: linear-gradient(90deg, #8be9ff, #a78bfa); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.title p { margin: 4px 0 0; color: var(--muted); font-size: 12px; letter-spacing: 4px; }
+header.title p { margin: 4px 0 0; color: var(--muted); font-size: 12px; letter-spacing: 4px; }
 
 .toggles { position: absolute; top: 88px; left: 24px; display: flex; flex-direction: column; gap: 6px; }
 .toggle { display: flex; align-items: center; gap: 8px; width: 180px; padding: 6px 10px; font-size: 13px; cursor: pointer;
@@ -55,7 +55,7 @@ html, body, #root { margin: 0; height: 100%; overflow: hidden; }
 .quakes { overflow-y: auto; }
 .quakes li { cursor: pointer; border-radius: 4px; padding: 3px 4px; }
 .quakes li:hover { background: rgba(255, 68, 51, 0.1); }
-.quakes .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.quakes .qtitle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
 .mag { min-width: 30px; text-align: center; font-weight: 600; border-radius: 3px; background: rgba(255, 255, 255, 0.06); }
 .mag.mid { color: #ffb020; } .mag.big { color: #fff; background: var(--quake); }
 .note { font-size: 10px; color: var(--muted); line-height: 1.5; }

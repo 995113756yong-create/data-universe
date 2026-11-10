@@ -31,7 +31,7 @@ export function MetricsPanel() {
         <div className="card flight">
           <div className="label">在空航班</div>
           <div className="value">{fmt(m?.flights_tracked)}</div>
-          <div className="sub">近 1 分钟更新 {fmt(m?.last_minute.opensky)} 次</div>
+          <div className="sub">{m?.sources.opensky.recv_ms ? `上次更新 ${ago(m.sources.opensky.recv_ms)}` : "等待数据"}</div>
         </div>
         <div className="card quake">
           <div className="label">24 小时地震</div>
@@ -85,7 +85,7 @@ export function MetricsPanel() {
           {quakes.slice(0, 12).map((q) => (
             <li key={q.id} onClick={() => engineRegistry.get()?.flyTo(q.lat, q.lng)}>
               <span className={`mag ${q.mag >= 5 ? "big" : q.mag >= 3 ? "mid" : ""}`}>{q.mag.toFixed(1)}</span>
-              <span className="title">{q.title.replace(/^M -?[\d.?]+ - /, "")}</span>
+              <span className="qtitle">{q.title.replace(/^M -?[\d.?]+ - /, "")}</span>
               <span className="muted">{ago(q.eventMs)}</span>
             </li>
           ))}
