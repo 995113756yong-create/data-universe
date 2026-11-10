@@ -1,6 +1,7 @@
 name: data-universe
 
 # 端口：19092 Redpanda(宿主机访问) / 8080 Console / 8081 Flink UI / 8123 ClickHouse HTTP / 9000 ClickHouse Native
+#       8090 Gateway（WebSocket + 前端静态页）
 services:
   redpanda:
     image: redpandadata/redpanda:v24.2.7
@@ -103,6 +104,30 @@ services:
       KAFKA_BOOTSTRAP: redpanda:9092
     depends_on:
       redpanda-init: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  gateway:
+    build: ./gateway
+    image: data-universe/gateway:0.2.0
+    environment:
+      KAFKA_BOOTSTRAP: redpanda:9092
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: du
+      CLICKHOUSE_PASSWORD: du_dev
+      STATIC_DIR: /app/static
+      FLIGHT_WINDOW_S: ${FLIGHT_WINDOW_S:-1200}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports: ["8090:8090"]
+    volumes:
+      - ./web/dist:/app/static:ro   # 前端构建产物；make web-build 后需重启 gateway
+    depends_on:
+      redpanda-init: { condition: service_completed_successfully }
+      clickhouse: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8090/healthz', timeout=3).status == 200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
     restart: unless-stopped
 
 volumes:

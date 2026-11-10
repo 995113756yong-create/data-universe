@@ -13,13 +13,14 @@ from collectors.backoff import backoff_delays
 from collectors.config import Settings
 from collectors.kafka_sink import KafkaSink
 from collectors.metrics import Counter, report_forever
+from collectors.opensky.poller import run_opensky
 from collectors.usgs.poller import run_usgs
 from collectors.utils import sleep_or_stop
 from collectors.wiki.sse_client import run_wiki
 
 log = logging.getLogger("collectors")
 
-RUNNERS = {"usgs": run_usgs, "wiki": run_wiki}
+RUNNERS = {"usgs": run_usgs, "wiki": run_wiki, "opensky": run_opensky}
 
 
 async def _start_sink(sink: KafkaSink, stop: asyncio.Event) -> bool:

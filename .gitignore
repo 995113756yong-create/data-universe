@@ -10,3 +10,6 @@ dist/
 node_modules/
 *.log
 .DS_Store
+web/dist/
+web/public/textures/*.jpg
+web/test-results/
