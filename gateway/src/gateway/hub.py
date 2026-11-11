@@ -41,6 +41,7 @@ class Hub:
         self.ch_ok = False
         self._panel: dict = {}
         self._panel_at = 0.0
+        self._panel_lock = asyncio.Lock()
         self.alerts = AlertStore()
         self.centroids = load_centroids()
         self.alerts_received = 0
@@ -108,14 +109,16 @@ class Hub:
     async def panel(self) -> dict:
         if self.ch is None:
             return {}
-        if time.monotonic() - self._panel_at > self.s.ch_cache_s:
-            try:
-                self._panel = await self.ch.panel()
-                self.ch_ok = True
-            except Exception as exc:  # noqa: BLE001 指标查询失败不影响实时推送
-                self.ch_ok = False
-                log.warning("clickhouse panel query failed: %r", exc)
-            self._panel_at = time.monotonic()
+        # 单飞：缓存过期时，指标广播、/api/metrics、新连接可能同时到达，只让一个去查 ClickHouse
+        async with self._panel_lock:
+            if time.monotonic() - self._panel_at > self.s.ch_cache_s:
+                try:
+                    self._panel = await self.ch.panel()
+                    self.ch_ok = True
+                except Exception as exc:  # noqa: BLE001 指标查询失败不影响实时推送
+                    self.ch_ok = False
+                    log.warning("clickhouse panel query failed: %r", exc)
+                self._panel_at = time.monotonic()
         return self._panel
 
     async def metrics(self) -> dict:

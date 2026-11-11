@@ -80,3 +80,23 @@ def test_alert_snapshot_merges_memory(settings):
     hub.ingest_alert(alert_raw())
     rows = asyncio.run(hub._alert_snapshot())
     assert {r["alert_id"] for r in rows} == {"quake-us1", "wiki_spike-Germany-2026-11-10 08:00:00"}
+
+
+def test_panel_single_flight(settings):
+    """回归：缓存过期时并发的 metrics 调用只能触发一套面板查询。"""
+
+    class SlowCH(FakeCH):
+        calls = 0
+
+        async def panel(self):
+            SlowCH.calls += 1
+            await asyncio.sleep(0.05)
+            return {"trend": []}
+
+    hub = Hub(settings, SlowCH())
+
+    async def go():
+        return await asyncio.gather(*(hub.panel() for _ in range(5)))
+
+    res = asyncio.run(go())
+    assert SlowCH.calls == 1 and all(r == {"trend": []} for r in res) and hub.ch_ok

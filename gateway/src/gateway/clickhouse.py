@@ -64,7 +64,9 @@ WHERE source = 'usgs' AND event_time > now64(3) - INTERVAL 24 HOUR
 MINUTE_COUNTS = """
 SELECT toUnixTimestamp(toStartOfMinute(event_time)) * 1000 AS m, uniqExact(event_id)
 FROM du.events
-WHERE source = {source:String} AND event_time >= now64(3) - INTERVAL 15 MINUTE
+WHERE source = {source:String}
+  -- 下界对齐到整分钟：否则最早一分钟只统计了一部分，与网关对数时比值偏高
+  AND event_time >= toStartOfMinute(now64(3) - INTERVAL 15 MINUTE)
 GROUP BY m
 ORDER BY m
 """
@@ -181,8 +183,9 @@ class ClickHouse:
         quakes = await self.rows(QUAKES_24H)
         try:
             alerts = {t: int(c) for t, c in await self.rows(ALERTS_24H)}
-        except httpx.HTTPStatusError:
-            alerts = {}  # 迁移 003 未执行时 du.alerts 不存在，不影响其他面板数据
+        except httpx.HTTPError:
+            # 迁移 003 未执行（表不存在）或告警查询超时：只丢这一项，不影响其他面板数据
+            alerts = {}
         q_cnt, q_max = quakes[0] if quakes else (0, 0)
         return {
             "trend": [{"ts": int(t), "source": s, "cnt": int(c)} for t, s, c in trend],

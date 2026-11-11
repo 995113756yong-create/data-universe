@@ -148,3 +148,30 @@ def test_http_error_raises():
     except httpx.HTTPStatusError:
         return
     raise AssertionError("expected HTTPStatusError")
+
+
+def test_minute_counts_lower_bound_is_minute_aligned():
+    """回归：下界用 now-15min 会把最早一分钟截成半分钟，网关/ClickHouse 比值偏高（实测 1.059）。"""
+    from gateway.clickhouse import MINUTE_COUNTS
+
+    assert "toStartOfMinute(now64(3) - INTERVAL 15 MINUTE)" in MINUTE_COUNTS
+
+
+def test_panel_tolerates_alerts_timeout():
+    """回归：告警计数查询超时不能拖垮整个面板（否则 clickhouse_ok 变 False）。"""
+
+    answers = iter([{"data": []}, {"data": []}, {"data": [[0, 0]]}])  # trend / top / quakes
+
+    def handler(req):
+        if b"du.alerts" in req.content:
+            raise httpx.ReadTimeout("slow", request=req)
+        return httpx.Response(200, content=orjson.dumps(next(answers)))
+
+    async def go():
+        ch = _ch(handler)
+        try:
+            return await ch.panel()
+        finally:
+            await ch.close()
+
+    assert _run(go())["alerts_24h"] == {}
