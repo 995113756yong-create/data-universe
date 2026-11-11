@@ -24,7 +24,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 THRESHOLDS = {
     "first_paint_s": 1.0,  # 连接 -> 收到非空维基快照
-    "tick_median_ms": (150, 300),  # 合包间隔中位数
+    # 合包节拍：按服务端 server_ms 计算，batch 间隔偏离 tick 整数倍的 p95。
+    # 协议规定无数据的 tick 不发 batch，间隔天然是 tick 的整数倍（数据稀疏时 400/600ms 都正常），
+    # 所以不能用间隔中位数衡量；事件循环被阻塞、发送变慢错过 tick 时，偏差会直接体现出来。
+    "tick_offset_p95_ms": 30,
     "browser_lag_p95_ms": 2000,  # 采集 -> 浏览器（维基）
     "flights_min": 500,
     "wiki_eps_min": 1.0,
@@ -151,7 +154,7 @@ async def probe_ws() -> None:
                 if m["layer"] == "wiki" and m["rows"] and got["first_paint"] is None:
                     got["first_paint"] = time.monotonic() - t0
             elif t == "batch":
-                ticks.append(time.monotonic())
+                ticks.append(m["server_ms"])
                 for row in m["rows"].get("wiki", []):
                     shape_ok &= len(row) == 9
                     lags.append(now_ms - row[5])
@@ -170,9 +173,16 @@ async def probe_ws() -> None:
     check(metrics_seen, "收到 metrics 推送")
     check(shape_ok, "batch 行字段数符合契约（点 9 列 / 航班 10 列）")
     if len(ticks) >= 10:
-        med = statistics.median((b - a) * 1000 for a, b in zip(ticks, ticks[1:], strict=False))
-        lo, hi = THRESHOLDS["tick_median_ms"]
-        check(lo <= med <= hi, f"合包间隔中位数 {med:.0f}ms ({lo}~{hi})")
+        tick_ms = (h or {}).get("tick_ms") or 200
+        iv = [b - a for a, b in zip(ticks, ticks[1:], strict=False)]
+        off = sorted(abs(x - round(x / tick_ms) * tick_ms) for x in iv)
+        p95 = off[int(len(off) * 0.95) - 1 if len(off) > 1 else 0]
+        lim = THRESHOLDS["tick_offset_p95_ms"]
+        check(
+            min(iv) >= tick_ms - lim and p95 <= lim,
+            f"合包节拍：{len(ticks)} 个 batch，间隔偏离 {tick_ms}ms 整数倍 p95 {p95}ms (<= {lim})，"
+            f"最小间隔 {min(iv)}ms，中位 {statistics.median(iv):.0f}ms（数据稀疏时为整数倍属正常）",
+        )
     else:
         bad(f"15 秒只收到 {len(ticks)} 个 batch")
     if lags:

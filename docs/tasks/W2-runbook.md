@@ -184,7 +184,7 @@ make verify-w2
 |---|---|
 | 「可对比的完整分钟只有 N 个」 | 网关刚重启，再等 3 分钟重跑；这不是失败原因，不要改脚本 |
 | 首屏耗时 > 1s | 报告 `/api/metrics` 中 `clickhouse_ok` 和 ClickHouse 慢查询（`system.query_log` 最近 10 条耗时） |
-| 合包间隔中位数不在 150~300ms | 报告网关 CPU（`docker stats --no-stream`） |
+| 合包节拍偏离 tick 整数倍 p95 > 30ms，或最小间隔 < tick−30ms | 报告网关 CPU（`docker stats --no-stream`）和 `docker compose logs gateway` 最后 50 行 |
 | 采集 -> 客户端 p95 > 2000ms | 先排除时钟漂移（上一节），再报告 `/api/metrics` 中的 `lag_ms` |
 | 网关/ClickHouse 对数比例超出 0.95~1.05 | 报告 `/api/debug/minute_counts?source=wiki` 的完整输出 |
 
