@@ -71,6 +71,7 @@ def test_panel_shape():
             {"data": [[1000, "wiki", "12"]]},
             {"data": [["wiki", "Germany", "7"]]},
             {"data": [["3", 5.4]]},
+            {"data": [["wiki_spike", "2"]]},
         ]
     )
 
@@ -87,6 +88,51 @@ def test_panel_shape():
     assert p["trend"] == [{"ts": 1000, "source": "wiki", "cnt": 12}]
     assert p["top_regions"][0]["cnt"] == 7
     assert p["quakes_24h"] == {"count": 3, "max_mag": 5.4}
+    assert p["alerts_24h"] == {"wiki_spike": 2}
+
+
+def test_panel_tolerates_missing_alerts_table():
+    answers = iter([{"data": []}, {"data": []}, {"data": [[0, 0]]}])
+
+    def handler(req):
+        try:
+            return httpx.Response(200, content=orjson.dumps(next(answers)))
+        except StopIteration:
+            return httpx.Response(404, text="Table du.alerts doesn't exist")
+
+    async def go():
+        ch = _ch(handler)
+        p = await ch.panel()
+        await ch.close()
+        return p
+
+    assert _run(go())["alerts_24h"] == {}
+
+
+def test_query_returns_columns_and_errors():
+    from gateway.clickhouse import ClickHouseError
+
+    def handler(req):
+        if b"bad" in req.content:
+            return httpx.Response(400, text="Code: 62. Syntax error")
+        assert req.url.params["max_result_rows"] == "10"
+        return httpx.Response(
+            200, content=orjson.dumps({"meta": [{"name": "a", "type": "UInt8"}], "data": [[1]]})
+        )
+
+    async def go():
+        ch = _ch(handler)
+        ok = await ch.query("SELECT 1 AS a", {"max_result_rows": "10"})
+        try:
+            await ch.query("bad")
+        except ClickHouseError as exc:
+            err = str(exc)
+        await ch.close()
+        return ok, err
+
+    ok, err = _run(go())
+    assert ok == {"columns": ["a"], "rows": [[1]]}
+    assert "Syntax error" in err
 
 
 def test_http_error_raises():
@@ -102,3 +148,30 @@ def test_http_error_raises():
     except httpx.HTTPStatusError:
         return
     raise AssertionError("expected HTTPStatusError")
+
+
+def test_minute_counts_lower_bound_is_minute_aligned():
+    """回归：下界用 now-15min 会把最早一分钟截成半分钟，网关/ClickHouse 比值偏高（实测 1.059）。"""
+    from gateway.clickhouse import MINUTE_COUNTS
+
+    assert "toStartOfMinute(now64(3) - INTERVAL 15 MINUTE)" in MINUTE_COUNTS
+
+
+def test_panel_tolerates_alerts_timeout():
+    """回归：告警计数查询超时不能拖垮整个面板（否则 clickhouse_ok 变 False）。"""
+
+    answers = iter([{"data": []}, {"data": []}, {"data": [[0, 0]]}])  # trend / top / quakes
+
+    def handler(req):
+        if b"du.alerts" in req.content:
+            raise httpx.ReadTimeout("slow", request=req)
+        return httpx.Response(200, content=orjson.dumps(next(answers)))
+
+    async def go():
+        ch = _ch(handler)
+        try:
+            return await ch.panel()
+        finally:
+            await ch.close()
+
+    assert _run(go())["alerts_24h"] == {}

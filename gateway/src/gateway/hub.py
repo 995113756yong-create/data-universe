@@ -8,6 +8,7 @@ import logging
 import time
 from collections.abc import AsyncIterator, Callable
 
+from gateway.alerts import AlertStore, load_centroids, normalize
 from gateway.clickhouse import ClickHouse
 from gateway.config import LAYERS, GatewaySettings
 from gateway.protocol import dumps, encode
@@ -40,6 +41,10 @@ class Hub:
         self.ch_ok = False
         self._panel: dict = {}
         self._panel_at = 0.0
+        self._panel_lock = asyncio.Lock()
+        self.alerts = AlertStore()
+        self.centroids = load_centroids()
+        self.alerts_received = 0
 
     # ---------- 事件入口 ----------
     def ingest(self, evt: dict, recv_ms: int | None = None) -> None:
@@ -89,18 +94,31 @@ class Hub:
             out[src] = {"status": status, **(info or {})}
         return out
 
+    def ingest_alert(self, raw: dict) -> dict | None:
+        alert = normalize(raw, self.centroids)
+        if alert is None:
+            return None
+        self.alerts_received += 1
+        is_new = self.alerts.upsert(alert)
+        msg = {"t": "alert", "alert": alert, "new": is_new}
+        for c in self.clients:
+            c.push_control(msg)
+        return alert
+
     # ---------- 指标 ----------
     async def panel(self) -> dict:
         if self.ch is None:
             return {}
-        if time.monotonic() - self._panel_at > self.s.ch_cache_s:
-            try:
-                self._panel = await self.ch.panel()
-                self.ch_ok = True
-            except Exception as exc:  # noqa: BLE001 指标查询失败不影响实时推送
-                self.ch_ok = False
-                log.warning("clickhouse panel query failed: %r", exc)
-            self._panel_at = time.monotonic()
+        # 单飞：缓存过期时，指标广播、/api/metrics、新连接可能同时到达，只让一个去查 ClickHouse
+        async with self._panel_lock:
+            if time.monotonic() - self._panel_at > self.s.ch_cache_s:
+                try:
+                    self._panel = await self.ch.panel()
+                    self.ch_ok = True
+                except Exception as exc:  # noqa: BLE001 指标查询失败不影响实时推送
+                    self.ch_ok = False
+                    log.warning("clickhouse panel query failed: %r", exc)
+                self._panel_at = time.monotonic()
         return self._panel
 
     async def metrics(self) -> dict:
@@ -117,13 +135,22 @@ class Hub:
             "clients": len(self.clients),
             "kafka_ok": self.kafka_ok,
             "clickhouse_ok": self.ch_ok,
+            "alerts_1h": self.alerts.count_since(now - 3600_000),
             **(await self.panel()),
         }
 
     # ---------- 后台任务 ----------
-    async def consume(self, source: Callable[[], AsyncIterator[dict]]) -> None:
-        async for evt in source():
-            self.ingest(evt)
+    async def consume(self, source: Callable[[], AsyncIterator]) -> None:
+        """source 产出 (topic, value) 元组；为兼容测试，也接受直接产出 evt.unified dict。"""
+        async for item in source():
+            if isinstance(item, tuple):
+                topic, value = item
+                if topic == "alert.anomaly":
+                    self.ingest_alert(value)
+                    continue
+                self.ingest(value)
+            else:
+                self.ingest(item)
 
     async def broadcast_metrics(self) -> None:
         while True:
@@ -172,3 +199,16 @@ class Hub:
                 continue
             rows = [enc[2] for enc in map(encode, events) if enc is not None]
             await session.send_raw(dumps({"t": "snapshot", "layer": layer, "rows": rows}))
+        await session.send_raw(dumps({"t": "alerts", "rows": await self._alert_snapshot()}))
+
+    async def _alert_snapshot(self) -> list[dict]:
+        """最近 6 小时告警：优先 ClickHouse（网关重启后也完整），失败则用内存里的。"""
+        try:
+            raw = await self.ch.recent_alerts(hours=6)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("alert snapshot failed: %r", exc)
+            return self.alerts.recent()
+        merged = {a["alert_id"]: a for a in (normalize(r, self.centroids) for r in raw) if a}
+        for a in self.alerts.recent():
+            merged[a["alert_id"]] = a  # 内存里的更新（还没落 ClickHouse 的修订）
+        return sorted(merged.values(), key=lambda a: a["event_time_ms"], reverse=True)[:50]

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { Layer, MetricsMsg } from "./protocol";
+import type { AlertItem, AskResult, Layer, MetricsMsg } from "./protocol";
 import type { FpsStats } from "./hud/fps";
 import type { QuakeItem } from "./stream/decode";
 
@@ -10,6 +10,20 @@ export interface BenchResult extends FpsStats {
   viewport: string;
   user_agent: string;
   pass: boolean;
+}
+
+export interface ReplayUi {
+  id: string;
+  title: string;
+  startMs: number;
+  endMs: number;
+  vMs: number;
+  speed: number;
+  playing: boolean;
+  buffering: boolean;
+  qa: AskResult[];
+  alertMarks: number[]; // 告警时间点（进度条刻度）
+  sampling: { wiki_per_min: number; flight_permille: number; flight_step_s: number };
 }
 
 export interface UiState {
@@ -24,6 +38,10 @@ export interface UiState {
   cap: number;
   layers: Record<Layer, boolean>;
   warnings: string[];
+  mode: "live" | "replay";
+  alerts: AlertItem[];
+  toasts: AlertItem[];
+  replay?: ReplayUi;
   bench?: { phase: "warmup" | "recording" | "done"; result?: BenchResult };
 }
 
@@ -37,6 +55,9 @@ let state: UiState = {
   cap: 0,
   layers: { wiki: true, usgs: true, opensky: true },
   warnings: [],
+  mode: "live",
+  alerts: [],
+  toasts: [],
 };
 const listeners = new Set<() => void>();
 

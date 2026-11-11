@@ -1,15 +1,7 @@
 import type { UniverseEngine } from "../globe/engine";
 import { LAYERS, type Layer } from "../protocol";
 import { store } from "../store";
-import type { QuakeItem } from "./decode";
-
-const MAX_QUAKES = 200;
-
-function mergeQuakes(prev: QuakeItem[], add: QuakeItem[]): QuakeItem[] {
-  const map = new Map(prev.map((q) => [q.id, q]));
-  for (const q of add) map.set(q.id, q);
-  return [...map.values()].sort((a, b) => b.eventMs - a.eventMs).slice(0, MAX_QUAKES);
-}
+import { pushAlerts, pushQuakes } from "./sink";
 
 /** 启动 Worker 并把数据分发给渲染引擎和 UI store。返回清理函数 */
 export function startStream(engine: UniverseEngine): () => void {
@@ -30,8 +22,10 @@ export function startStream(engine: UniverseEngine): () => void {
         engine.addWiki(m.pk);
         break;
       case "usgs":
-        engine.addQuakes(m.items);
-        store.set({ quakes: mergeQuakes(store.get().quakes, m.items) });
+        pushQuakes(engine, m.items);
+        break;
+      case "alerts":
+        pushAlerts(engine, m.items, m.live);
         break;
       case "flights":
         engine.upsertFlights(m.pk);

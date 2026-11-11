@@ -52,6 +52,34 @@ def flight_evt(icao: str, t: int, lat=45.0, lng=5.0) -> dict:
     }
 
 
+def alert_raw(
+    aid="wiki_spike-Germany-2026-11-10 08:00:00",
+    atype="wiki_spike",
+    region="Germany",
+    lat=None,
+    lng=None,
+    value=95.0,
+    t=1_794_300_000_000,
+):
+    return {
+        "alert_id": aid,
+        "alert_type": atype,
+        "source": "wiki" if atype == "wiki_spike" else "usgs",
+        "region": region,
+        "window_start": "2026-11-10 08:00:00",
+        "event_time_ms": t,
+        "detected_ms": t + 150_000,
+        "value": value,
+        "baseline_mean": 30.0 if atype == "wiki_spike" else None,
+        "baseline_std": 6.123 if atype == "wiki_spike" else None,
+        "zscore": 10.6 if atype == "wiki_spike" else None,
+        "severity": "high",
+        "lat": lat,
+        "lng": lng,
+        "title": "Wikipedia edit spike: Germany",
+    }
+
+
 class FakeWS:
     def __init__(self, send_delay: float = 0.0):
         self.sent: list[str] = []
@@ -82,6 +110,13 @@ class FakeCH:
             "top_regions": [],
             "quakes_24h": {"count": 0, "max_mag": 0},
         }
+
+    async def recent_alerts(self, hours=6):
+        return [alert_raw("quake-us1", "quake_significant", region="Japan", lat=36.0, lng=140.0)]
+
+    async def query(self, sql, settings=None):
+        self.queries = getattr(self, "queries", []) + [sql]
+        return {"columns": ["region", "cnt"], "rows": [["Germany", 120], ["Japan", 80]]}
 
     async def minute_counts(self, source):
         return {1_794_281_520_000: 2}

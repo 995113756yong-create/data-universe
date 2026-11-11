@@ -12,6 +12,7 @@ export function Hud() {
   const dropped = useStore((s) => s.dropped);
   const warnings = useStore((s) => s.warnings);
   const layers = useStore((s) => s.layers);
+  const mode = useStore((s) => s.mode);
   // 只统计开着的图层；各图层自己的数量在左上角开关旁显示
   const total = (layers.wiki ? counts.wiki : 0) + (layers.usgs ? counts.usgs : 0) + (layers.opensky ? counts.opensky : 0);
   return (
@@ -20,10 +21,14 @@ export function Hud() {
       <span>1% Low {fps.low1.toFixed(0)}</span>
       <span>{total.toLocaleString()} 点</span>
       <span>{(net.bytesPerSec / 1024).toFixed(1)} KB/s</span>
-      <span className={`conn ${conn}`}>
-        {CONN[conn]}
-        {conn === "closed" && retry ? `，${Math.ceil(retry / 1000)} 秒后重连` : ""}
-      </span>
+      {mode === "replay" ? (
+        <span className="conn open">回放模式 · 静态数据</span>
+      ) : (
+        <span className={`conn ${conn}`}>
+          {CONN[conn]}
+          {conn === "closed" && retry ? `，${Math.ceil(retry / 1000)} 秒后重连` : ""}
+        </span>
+      )}
       {cap > 0 && <span className="muted">推送上限 {cap}/包 · 已抽样丢弃 {dropped.wiki.toLocaleString()}</span>}
       {warnings.map((w) => (
         <span key={w} className="warn">⚠ {w}</span>

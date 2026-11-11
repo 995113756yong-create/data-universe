@@ -76,3 +76,86 @@ def test_ws_subscribe_only_flights(settings):
                     if flights:
                         break
             assert flights == 1
+
+
+class StubAgent:
+    class llm:  # noqa: N801
+        model = "stub"
+
+    def __init__(self, fail=False):
+        self.fail = fail
+        self.questions = []
+
+    async def ask(self, q):
+        from gateway.ai.agent import AskError, AskResult
+
+        self.questions.append(q)
+        if self.fail:
+            raise AskError("模型调用失败：HTTP 401")
+        return AskResult(answer="ok", highlights=[{"lat": 1, "lng": 2, "label": "x"}], model="stub")
+
+
+def _quiet_source():
+    async def source():
+        await asyncio.sleep(3600)
+        yield {}
+
+    return source
+
+
+def test_ask_disabled(settings):
+    app = create_app(settings, ch=FakeCH(), event_source=_quiet_source())
+    with TestClient(app) as client:
+        assert client.get("/api/ask/status").json()["enabled"] is False
+        r = client.post("/api/ask", json={"question": "最近有地震吗"})
+        assert r.status_code == 503
+
+
+def test_ask_flow_validation_and_ratelimit(settings):
+    from dataclasses import replace
+
+    agent = StubAgent()
+    app = create_app(
+        replace(settings, ai_per_min=2), ch=FakeCH(), event_source=_quiet_source(), agent=agent
+    )
+    with TestClient(app) as client:
+        assert client.get("/api/ask/status").json() == {
+            "enabled": True,
+            "provider": "deepseek",
+            "model": "stub",
+        }
+        assert client.post("/api/ask", json={"question": "x"}).status_code == 422  # 太短
+        assert client.post("/api/ask", json={"question": "a" * 301}).status_code == 422
+        r = client.post("/api/ask", json={"question": "  最近有地震吗  "})
+        assert r.status_code == 200 and r.json()["answer"] == "ok"
+        assert agent.questions == ["最近有地震吗"]
+        assert client.post("/api/ask", json={"question": "再问一次"}).status_code == 200
+        r = client.post("/api/ask", json={"question": "第三次"})
+        assert r.status_code == 429 and "频繁" in r.json()["error"]
+        # 不同 IP（经反向代理）单独计数
+        r = client.post(
+            "/api/ask", json={"question": "第三次"}, headers={"x-forwarded-for": "9.9.9.9"}
+        )
+        assert r.status_code == 200
+
+
+def test_ask_agent_error(settings):
+    app = create_app(
+        settings, ch=FakeCH(), event_source=_quiet_source(), agent=StubAgent(fail=True)
+    )
+    with TestClient(app) as client:
+        r = client.post("/api/ask", json={"question": "最近有地震吗"})
+        assert r.status_code == 502 and "401" in r.json()["error"]
+
+
+def test_ws_sends_alert_snapshot(settings):
+    app = create_app(settings, ch=FakeCH(), event_source=_quiet_source())
+    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+        types = []
+        for _ in range(6):
+            m = ws.receive_json()
+            types.append(m["t"])
+            if m["t"] == "alerts":
+                assert m["rows"][0]["alert_id"] == "quake-us1"
+                break
+        assert "alerts" in types

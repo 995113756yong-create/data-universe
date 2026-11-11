@@ -38,6 +38,47 @@ export interface MetricsMsg {
   trend?: { ts: number; source: Layer; cnt: number }[];
   top_regions?: { source: Layer; region: string; cnt: number }[];
   quakes_24h?: { count: number; max_mag: number };
+  alerts_1h?: number;
+  alerts_24h?: Partial<Record<AlertType, number>>;
 }
 export interface WarnMsg { t: "warn"; msg: string }
-export type ServerMsg = HelloMsg | SnapshotMsg | BatchMsg | MetricsMsg | WarnMsg;
+
+// ---- W3 告警（字段与 gateway/src/gateway/alerts.py 一致） ----
+export type AlertType = "wiki_spike" | "quake_significant";
+export type Severity = "medium" | "high" | "critical";
+export interface AlertItem {
+  alert_id: string;
+  alert_type: AlertType;
+  source: string;
+  region: string;
+  window_start: string;
+  event_time_ms: number;
+  detected_ms: number;
+  value: number;
+  baseline_mean: number | null;
+  baseline_std: number | null;
+  zscore: number | null;
+  severity: Severity;
+  lat: number | null;
+  lng: number | null;
+  title: string;
+  geo_precision: "exact" | "approx" | "none";
+}
+export interface AlertMsg { t: "alert"; alert: AlertItem; new: boolean }
+export interface AlertsMsg { t: "alerts"; rows: AlertItem[] }
+
+export type ServerMsg = HelloMsg | SnapshotMsg | BatchMsg | MetricsMsg | WarnMsg | AlertMsg | AlertsMsg;
+
+// ---- W3 AI 提问（POST /api/ask 响应） ----
+export interface Highlight { lat: number; lng: number; label: string; geo_precision: "exact" | "approx" }
+export interface AskResult {
+  answer: string;
+  highlights: Highlight[];
+  sql: string[];
+  table: { columns: string[]; rows: unknown[][]; total: number } | null;
+  steps: number;
+  elapsed_ms: number;
+  model: string;
+  question?: string;
+  asked_ms?: number;
+}

@@ -13,3 +13,5 @@ node_modules/
 web/dist/
 web/public/textures/*.jpg
 web/test-results/
+web/dist-static/
+# 回放包：web/public/replay/ 需要提交（静态站点部署要用），只保留一份，体积见 make replay-export 输出

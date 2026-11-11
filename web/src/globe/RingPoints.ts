@@ -61,6 +61,12 @@ export class RingPoints {
     this.dirty = true;
   }
 
+  /** 清空所有点（回放拖动进度时用） */
+  clear() {
+    this.births.fill(-1e9);
+    this.dirty = true;
+  }
+
   /** 每帧调用。数据有变化才上传 GPU */
   tick(timeS: number) {
     this.material.uniforms.uTime.value = timeS;

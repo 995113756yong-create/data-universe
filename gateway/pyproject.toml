@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "du-gateway"
-version = "0.2.0"
+version = "0.3.0"
 description = "Data Universe realtime WebSocket gateway"
 requires-python = ">=3.11"
 dependencies = [
@@ -13,6 +13,7 @@ dependencies = [
     "aiokafka>=0.11",
     "httpx>=0.27,<1",
     "orjson>=3.10",
+    "sqlglot>=25,<31",
 ]
 
 [project.optional-dependencies]
@@ -24,6 +25,9 @@ du-gateway = "gateway.main:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+gateway = ["*.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
@@ -34,3 +38,7 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# 提示词是给模型看的长文本，不折行
+"src/gateway/ai/prompt.py" = ["E501"]
