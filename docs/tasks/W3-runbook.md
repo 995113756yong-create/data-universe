@@ -25,6 +25,9 @@
    模型必须支持 function calling（工具调用）。
 
 ## R1 静态检查
+
+> 环境说明：Windows 下 `.sh` 脚本必须在 Git Bash 或 WSL 里执行；`cmd /c bash` 可能解析到 WSL relay 导致 execvpe 失败。
+
 ```bash
 make dev-setup     # gateway 新增依赖 sqlglot，必须重装
 make check
